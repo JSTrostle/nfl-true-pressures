@@ -195,7 +195,7 @@ pbp |>
   left_join(teams) |> 
   rename(qb_hit_observed = qb_hit) -> pbp2
 
-data_list <- list('notes' = pbp2$air_yards,'cat' = pbp2$qb_hit_observed, "N" = 16422, "id" = pbp2$id, "N_id" = 32 )
+data_list <- list('notes' = pbp2$air_yards,'cat' = pbp2$qb_hit_observed, "N" = 1000, "id" = pbp2$id, "N_id" = 32 )
 
 fit <- mod$sample(
   data = data_list, 
