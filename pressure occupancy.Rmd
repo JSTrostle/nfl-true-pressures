@@ -191,7 +191,7 @@ pbp |>
 pbp |> 
   select(air_yards, qb_hit, posteam) |> 
   filter(air_yards >= 0) |> 
- # slice_sample(n = 1000) |> 
+  slice_sample(n = 1000) |> 
   left_join(teams) |> 
   rename(qb_hit_observed = qb_hit) -> pbp2
 
