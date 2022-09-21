@@ -3,21 +3,19 @@ library(nflreadr)
 library(cmdstanr)
 library(tidyverse)
 set.seed(1998)
+```
 
-file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy.stan")
-mod <- cmdstan_model(file, stanc_options = list("O1"))
-
-load_pbp(2021) -> pbp
-
-pbp |> 
-  select(air_yards, qb_hit) |> 
-  filter(air_yards >= 0) -> pbp2
-
+```{r}
 kappa = 0.8
 delta = 0.3
 random = runif(1000, 0, 1)
 alpha = 7
 beta = -5
+```
+
+```{r}
+file <- file.path("/home/jonastrostle/False home/NFL/NFL Mark 4/nfl_true_pressures", "cats_occupancy.stan")
+mod <- cmdstan_model(file, stanc_options = list("O1"))
 
 sim_data <- tibble(qb_hit = rbinom(n=1000,size=1,prob=kappa), air_yards = rpois(n = 1000, lambda = alpha + beta * qb_hit))
 
@@ -37,7 +35,7 @@ rethinking::precis(fit)
 ```
 
 ```{r}
-file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy2.stan")
+file <- file.path("/home/jonastrostle/False home/NFL/NFL Mark 4/nfl_true_pressures", "cats_occupancy2.stan")
 mod <- cmdstan_model(file, stanc_options = list("O1"))
 
 sim_data2 <- tibble(qb_hit = rbinom(n=1000,size=1,prob=kappa), id = rep(1:5, times = 200), air_yards = rpois(n = 1000, lambda = alpha + id + beta * qb_hit))
@@ -58,9 +56,8 @@ rethinking::precis(fit, depth = 2)
 ```
 
 ```{r}
-file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy3.stan")
+file <- file.path("/home/jonastrostle/False home/NFL/NFL Mark 4/nfl_true_pressures", "cats_occupancy3.stan")
 mod <- cmdstan_model(file, stanc_options = list("O1"))
-
 
 sim_data3 <- tibble(qb_hit = rbinom(n=1000,size=1,prob=kappa), id = rep(1:5, times = 200), air_yards = rpois(n = 1000, lambda = alpha + beta * qb_hit)) |>  
   mutate(qb_hit_observed = ifelse(qb_hit == 1 & delta > random, 0, qb_hit))
@@ -77,12 +74,11 @@ fit <- mod$sample(
 
 rethinking::precis(fit)
 
-#seems to work
+#doesn't seem to work
 ```
 
-
 ```{r}
-file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy5.stan")
+file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy4.stan")
 mod <- cmdstan_model(file, stanc_options = list("O1"))
 random <- runif(1000,0,1)
 
@@ -158,12 +154,6 @@ fit <- mod$sample(
 )
 
 rethinking::precis(fit, depth = 2)
-
-rethinking::precis(fit, depth = 2) |>  as_tibble() |> slice_head(n = 64) |>  mutate(id = rep(1:32, times = 2), name = c(rep("alpha", times = 32), rep("beta", times = 32))) |> left_join(teams) -> predicted_values
-
-predicted_values |> 
-  select(posteam, name, mean, sd) |> 
-  pivot_wider(names_from = name, values_from = c(mean, sd)) -> predicted_values2
 ```
 
 ```{r}
@@ -189,7 +179,6 @@ fit <- mod$sample(
 rethinking::precis(fit)
 ```
 
-
 ```{r}
 file <- file.path("/home/jonastrostle/Downloads/occupancy", "cats-occupancy4.stan")
 mod <- cmdstan_model(file, stanc_options = list("O1"))
@@ -202,11 +191,11 @@ pbp |>
 pbp |> 
   select(air_yards, qb_hit, posteam) |> 
   filter(air_yards >= 0) |> 
-  slice_sample(n = 1000) |> 
+ # slice_sample(n = 1000) |> 
   left_join(teams) |> 
   rename(qb_hit_observed = qb_hit) -> pbp2
 
-data_list <- list('notes' = pbp2$air_yards,'cat' = pbp2$qb_hit_observed, "N" = 1000, "id" = pbp2$id, "N_id" = 32 )
+data_list <- list('notes' = pbp2$air_yards,'cat' = pbp2$qb_hit_observed, "N" = 16422, "id" = pbp2$id, "N_id" = 32 )
 
 fit <- mod$sample(
   data = data_list, 
@@ -219,15 +208,4 @@ fit <- mod$sample(
 
 rethinking::precis(fit, depth = 2)
 
-|>  as_tibble() |> filter(mean != 0.50) |> slice_head(n = 128) |>  mutate(id = rep(1:32, times = 4), name = c(rep("kappa", times = 32), rep("delta", times = 32), rep("alpha", times = 32), rep("beta", times = 32))) |> left_join(teams) -> predicted_values3
-
-predicted_values3 |> 
-  select(posteam, name, mean, sd, rhat) |> 
-  pivot_wider(names_from = name, values_from = c(mean, sd, rhat)) -> predicted_values4
 ```
-
-```{r}
-hist(pbp2$air_yards)
-hist(sim_data4$air_yards)
-```
-
