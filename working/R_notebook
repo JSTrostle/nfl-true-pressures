@@ -1,0 +1,134 @@
+
+
+```{r}
+library(nflreadr)
+library(tidyverse)
+library(cmdstanr)
+library(gt)
+library(gtExtras)
+library(nflplotR)
+```
+
+```{r}
+load_pbp(2022) -> pbp
+
+pbp |> 
+  filter(pass == 1, !is.na(epa), !is.na(qb_hit)) |> 
+  select(desc, posteam, defteam, qb_hit, epa, name, week) -> pbp2
+
+pbp2 |> 
+  group_by(posteam) |> 
+  mutate(team_index = cur_group_id()) |> 
+  ungroup() -> pbp3
+```
+
+
+```{r}
+file <- file.path("~/NFL Mark 5/cats_enhanced_3-14-2023.stan")
+mod <- cmdstan_model(file, stanc_options = list("O1"))
+
+data_list <- list("plays" = nrow(pbp3), "epa" = pbp3$epa, "hit" = pbp3$qb_hit, "team_id" = pbp3$team_index, teams = 32)
+
+fit <- mod$sample(
+  data = data_list, 
+  seed = 123, 
+  chains = 4, 
+  parallel_chains = 4,
+  refresh = 10 # print update every 500 iters
+)
+fit$summary(variables = "hit_impute")
+            
+fit$summary(variables = "hit_impute", "mean", "sd") |> as_tibble() -> temps
+
+pbp3 |> 
+  bind_cols(temps) |> 
+  select(-variable) |> 
+  rename(hit_impute = mean) -> pbp4
+```
+
+
+```{r}
+load_pfr_advstats(stat_type = "pass", summary_level = "season") -> pfr
+
+pfr |> 
+  ungroup() |> 
+  group_by(team) |> 
+  summarise(passes = sum(pass_attempts),
+            pressures = sum(times_pressured),
+            pressure_pct = pressures / passes) |> 
+  ungroup() |> 
+  mutate(team = ifelse(team == "LVR", "LV", team),
+         team = ifelse(team == "LAR", "LA", team))-> pfr2
+
+pbp4 |> 
+  group_by(posteam) |> 
+  summarise(plays = n(),
+            epa = sum(epa),
+            team = last(posteam),
+            opponent = last(defteam),
+            pressured_rate = mean(hit_impute),
+            hit_rate = mean(qb_hit)) |> 
+  ungroup() |> 
+  mutate(differences = rethinking::standardize(pressured_rate) - rethinking::standardize(hit_rate)) -> eda_1
+```
+
+
+```{r}
+eda_1 |> 
+  left_join(pfr2) -> eda_2
+
+eda_2 |> 
+  arrange(pressured_rate) |> 
+  mutate(rank = seq(1:32)) |> 
+  select(rank, team, plays, epa, pressured_rate, hit_rate) -> eda_3
+
+nflreadr::load_teams() |> 
+  select(team_abbr, team_wordmark) |> 
+  rename(team = team_abbr) -> teams
+
+eda_3 |> 
+  left_join(teams) -> eda_4
+
+eda_4 |> 
+  left_join(pfr2) -> eda_5
+
+eda_5 |> 
+  select(rank, team_wordmark, plays, epa, hit_rate, pressured_rate, pressure_pct) |> 
+  gt() |> 
+  cols_align("center", c(plays, epa, hit_rate, pressured_rate, pressure_pct)) %>%
+  tab_header(
+    title = "Modeling quarterback pressures from knockdown data, 2022 NFL season",
+    subtitle = "Hit = 1 always means hit, but hit = 0 sometimes means hit as well"
+  ) %>%
+  gt_hulk_col_numeric(columns = c(hit_rate, pressured_rate, pressure_pct), reverse = T) |> 
+  tab_options(
+    table.border.top.color = "white",
+    row.striping.include_table_body = FALSE
+  ) %>%
+  tab_source_note(
+    source_note = "Data: @NFLVerse & Pro Football Reference (PFR pressures) | Table: @jonas_trostle@mastodon.online"
+  ) %>%
+   fmt_number(
+     columns = epa,
+     decimals = 0
+   ) %>%
+  fmt_percent(
+    columns = c(pressured_rate, hit_rate, pressure_pct),
+    decimals = 0,
+  ) |> 
+  gtExtras::gt_img_rows(columns = team_wordmark, height = 20) %>%
+  gt_add_divider(columns = c(pressured_rate, hit_rate), style = "dashed") |> 
+  cols_label(
+    rank = "",
+    team_wordmark = "TEAM",
+    plays = "DROPBACKS",
+    epa = "EPA",
+    hit_rate = "HIT",
+    pressured_rate = "PRESSURED",
+    pressure_pct = "PFR PRESSURE"
+  ) |> 
+  gt_theme_538() -> jt_table
+
+gtsave_extra(jt_table, "pressure_table.png")
+```
+
