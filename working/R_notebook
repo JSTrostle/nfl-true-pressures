@@ -24,7 +24,7 @@ pbp2 |>
 
 
 ```{r}
-file <- file.path("~/NFL Mark 5/cats_enhanced_3-14-2023.stan")
+file <- file.path("~/working_final_version.stan")
 mod <- cmdstan_model(file, stanc_options = list("O1"))
 
 data_list <- list("plays" = nrow(pbp3), "epa" = pbp3$epa, "hit" = pbp3$qb_hit, "team_id" = pbp3$team_index, teams = 32)
