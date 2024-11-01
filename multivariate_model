@@ -1,0 +1,43 @@
+data{
+    int plays;
+    int teams;
+    array[plays] int team_id;
+    int K; // number of categories
+    array[plays] int qb_hit;
+    array[plays] vector[K] y;// outcomes: epa, air_yards, cpoe
+}
+parameters{
+    vector<lower = 0, upper = 1>[teams] kappa; // pressure rate
+    real<lower = 0, upper = 1> delta; // detection prob
+    matrix[teams, K] beta; // change in epa/cpoe/air_yards from hit
+    matrix[teams, K] alpha; // base epa/cpoe/air_yards
+    vector<lower = 0>[K] sigma;
+    cholesky_factor_corr[K] L_corr;	
+}
+model{
+    kappa ~ beta_proportion(0.3,10);
+    delta ~ beta_proportion(0.8,10);
+    to_vector(beta) ~ normal(0, 0.15);
+    to_vector(alpha) ~ normal(0, 0.15);
+    matrix[K, K] L_Sigma;
+    L_Sigma = diag_pre_multiply(sigma, L_corr);
+    sigma ~ exponential(1);
+    L_corr ~ lkj_corr_cholesky(1);
+    real log_delta;
+    log_delta = log(delta);
+    real log1m_delta;
+    log1m_delta = log1m(delta);
+  for ( i in 1:plays ) {
+    real log_kappa;
+    log_kappa = log(kappa[team_id[i]]);
+    real log1m_kappa;
+    log1m_kappa = log1m(kappa[team_id[i]]);
+        if ( qb_hit[i]==1 )
+              target += log_kappa + log_delta +  multi_normal_cholesky_lpdf( y[i] | beta[team_id[i],], L_Sigma );
+        if ( qb_hit[i]==0 ) {
+            target += log_sum_exp(
+              log_kappa + log1m_delta + multi_normal_cholesky_lpdf( y[i] | beta[team_id[i],], L_Sigma ),
+              log1m_kappa + multi_normal_cholesky_lpdf( y[i] | alpha[team_id[i],], L_Sigma ) );
+        }
+    }
+}
